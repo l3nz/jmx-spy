@@ -11,6 +11,22 @@
 
 (capture-build-env-to BUILD)
 
+(def ^:dynamic *ERRORLOG* "")
+
+(defn now []
+  (.format
+   (new java.text.SimpleDateFormat "yyyy-MM-dd HH:mm:ss")
+   (java.util.Date.)))
+
+(defn logErr
+  [& msg]
+
+  (if (not (empty? *ERRORLOG*))
+
+    (let [myMsg (apply str msg)
+          fullMsg (str (now) ": " myMsg "\n")]
+      (spit *ERRORLOG* fullMsg :append true))))
+
 (defn string->attr
   [attribute]
 
@@ -37,9 +53,18 @@
 (defn read-bean-attr [defaultMap {:keys [bean attribute as]}]
   (let [v (try
             (read-bean bean attribute)
-            (catch Exception e "0"))]
+            (catch Exception e
+              (do
+                (logErr "Bean: '" bean "'  Attr: '" attribute "' Error: " e)
+                :ERROR)))]
 
     (into defaultMap {:metrics as :value v})))
+
+(defn mkStatus
+  [isOk? extraAttrs]
+
+  (into extraAttrs {:metrics "jmx_error_status"
+                    :value (if isOk? 0 1)}))
 
 (defn beans-for
   "Turns a list of presets into a list of beans"
@@ -54,25 +79,57 @@
  :args (s/cat :cfg ::S/CFG
               :presets (s/coll-of keyword?)))
 
-(defn dump-server [cfg {:keys [creds extra-attrs polling]}]
+(defn dump-server
+  [cfg {:keys [creds extra-attrs polling]}]
   (let [allbeans (beans-for cfg polling)]
     (mapv (partial read-bean-attr extra-attrs) allbeans)))
 
-(defn dump-server-maybe-remote [cfg {:keys [creds extra-attrs polling] :as all}]
-  (if (empty? creds)
-    (dump-server cfg all)
+(defn dump-server-maybe-remote
+  [cfg {:keys [creds extra-attrs] :as all}]
 
-    (jmx/with-connection creds
-      (dump-server cfg all))))
+  (try
+    (let [beans (if (empty? creds)
+                  (dump-server cfg all)
+
+                  (jmx/with-connection creds
+                    (dump-server cfg all)))
+
+          have-errors? (contains? (mapv :value beans) :ERROR)
+          error-free (filter #(not= :ERROR (:value %)) beans)]
+
+      (conj error-free (mkStatus have-errors? extra-attrs)))
+
+    (catch Exception e
+      (do
+        (logErr "Connection issue " creds ":" e)
+        [(mkStatus false extra-attrs)]))))
 
 (defn dump-all-servers
-  [{:keys [cfg]}]
+  [{:keys [cfg errorlog]}]
 
-  (let [servers (:servers cfg)
-        data (reduce into []
-                     (map (partial dump-server-maybe-remote cfg) servers))]
+  (binding [*ERRORLOG* errorlog]
+    (let [_ (logErr "======= Starting ========")
+          servers (:servers cfg)
+          data (reduce into []
+                       (map (partial dump-server-maybe-remote cfg) servers))
+          sorted-data (sort-by :metrics data)
+          _ (logErr "======= Ending ==========")]
 
-    (println (json/generate-string data))))
+      (println
+       (json/generate-string sorted-data {:pretty true})))))
+
+(defn test-connection
+  [{:keys [credentials bean attribute]}]
+
+  (let [val
+
+        (if (empty? credentials)
+          (read-bean bean attribute)
+
+          (jmx/with-connection credentials
+            (read-bean bean attribute)))]
+
+    (println "Bean: " bean " " attribute "=" val)))
 
 (def CONFIGURATION
   {:app         {:command     "jmx-spy"
@@ -82,12 +139,33 @@
                                " - built at "
                                (get-in BUILD [:project :built-at]))}
    :global-opts []
-   :commands    [{:command     "json" :short "j"
+   :commands    [{:command     "json"
+                  :short "j"
                   :description ["Prints JMX beans as JSON"]
                   :opts        [{:option "cfg"
                                  :as "EDN configuration"
-                                 :type :ednfile}]
-                  :runs        dump-all-servers}]})
+                                 :type :ednfile}
+                                {:option "errorlog"
+                                 :as "EDN configuration"
+                                 :type :string
+                                 :default ""}]
+                  :runs        dump-all-servers}
+
+                 {:command     "test"
+                  :short "t"
+                  :description ["Tests a JMX connection"]
+                  :opts        [{:option "credentials"
+                                 :as "EDN credentials, es '{:host \"127.0.0.1\", :port 7666}'"
+                                 :default '{} ':type :edn}
+                                {:option "bean"
+                                 :as "A bean"
+                                 :default "java.lang:type=Memory"
+                                 :type :string}
+                                {:option "attribute"
+                                 :as "The attribute to read"
+                                 :default "HeapMemoryUsage.used"
+                                 :type :string}]
+                  :runs        test-connection}]})
 
 (defn -main
   "This is our entry point.
