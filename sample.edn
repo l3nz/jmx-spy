@@ -1,13 +1,12 @@
 {:presets {:memory
              [{:bean "java.lang:type=Memory"
                :attribute "HeapMemoryUsage.used" :as "mem_used"}
-              {:bean "x" :attribute "y" :as "q"}
-              {:bean "x" :attribute "y" :as "q2"}
-
+              
               ]
 
            ; --- whatsup ---
-           :kafka [{:bean "x" :attribute "y" :as "k1"}]
+           :kafka [{:as "nonheap_used" :bean "java.lang:type=Memory" :attribute "NonHeapMemoryUsage.used"}
+{:as "nonheap_max" :bean "java.lang:type=Memory" :attribute "NonHeapMemoryUsage.max"}]
 
            }
 

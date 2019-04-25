@@ -94,10 +94,10 @@
                   (jmx/with-connection creds
                     (dump-server cfg all)))
 
-          have-errors? (contains? (mapv :value beans) :ERROR)
+          have-errors? (some? (some #{:ERROR} (map :value beans)))
           error-free (filter #(not= :ERROR (:value %)) beans)]
 
-      (conj error-free (mkStatus have-errors? extra-attrs)))
+      (conj error-free (mkStatus (not have-errors?) extra-attrs)))
 
     (catch Exception e
       (do
