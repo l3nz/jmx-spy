@@ -1,11 +1,22 @@
 (ns jmxspy.specs
   (:require [clojure.spec.alpha :as s]))
 
-(s/def ::a-bean
-  (s/keys :req-un [::bean ::attribute ::as]))
+(s/def ::searchable? boolean?)
+
+(def ALLOWED_GROUPING
+  #{:sum :count :first})
+
+(s/def ::group-by ALLOWED_GROUPING)
+
+(s/def ::a-full-bean
+  (s/keys :req-un [::bean ::attribute ::as ::searchable? ::group-by]))
+
+(s/def ::a-source-bean
+  (s/keys :req-un [::bean ::attribute]
+          :opt-un [::as ::group-by]))
 
 (s/def ::presets
-  (s/map-of keyword? (s/coll-of ::a-bean)))
+  (s/map-of keyword? (s/coll-of ::a-source-bean)))
 
 (s/def ::creds
   (s/or
