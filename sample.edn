@@ -1,18 +1,12 @@
 {:presets {:memory
-             [{:bean "java.lang:type=Memory"
-               :attribute "HeapMemoryUsage.used" :as "mem_used"}
-              
-              ]
+           [{:bean "java.lang:type=Memory"
+             :attribute "HeapMemoryUsage.used" :as "mem_used"}]
 
            ; --- whatsup ---
            :kafka [{:as "nonheap_used" :bean "java.lang:type=Memory" :attribute "NonHeapMemoryUsage.used"}
-{:as "nonheap_max" :bean "java.lang:type=Memory" :attribute "NonHeapMemoryUsage.max"}]
+                   {:as "nonheap_max" :bean "java.lang:type=Memory" :attribute "NonHeapMemoryUsage.max"}]}
 
-           }
-
-   :servers [{:creds {}
-              :extra-attrs {:host "srv" :jvm "kafka"}
-              :polling [:memory :kafka]}]}
-
-
+ :servers [{:creds {}
+            :extra-attrs {:host "srv" :jvm "kafka"}
+            :polling [:memory :kafka]}]}
 
